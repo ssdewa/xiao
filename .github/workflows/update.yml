@@ -1,0 +1,254 @@
+name: xiaosa Updater
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # 每6小时检查一次更新
+  workflow_dispatch:        # 允许手动触发
+
+jobs:
+  update-tvbox-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史记录，便于提交
+    
+    - name: Check for updates
+      id: check-update
+      run: |
+        # API 接口地址
+        API_URL="https://pizazz.s3.bitiful.net/single.json"
+        USER_AGENT="okHttp/Mod-1.5.0.0"
+        
+        # 获取最新文件信息
+        echo "正在获取文件信息..."
+        file_info=$(curl -s -H "User-Agent: $USER_AGENT" "$API_URL")
+        
+        # 从JSON中提取下载URL和文件名
+        download_url=$(echo "$file_info" | jq -r '.[] | select(.name=="本地包") | .list[1].url')
+        version=$(echo "$file_info" | jq -r '.[] | select(.name=="本地包") | .list[1].version')
+        file_name=$(echo "$download_url" | grep -o '[^/]*\.zip$' || echo "单线路.zip")
+        
+        # 检查API响应
+        if [ -z "$download_url" ] || [ "$download_url" = "null" ] || [ "$download_url" = "" ]; then
+          echo "::error::无法获取下载地址"
+          echo "API响应: $file_info"
+          exit 1
+        fi
+        
+        echo "下载地址: $download_url"
+        echo "版本信息: $version"
+        echo "文件名: $file_name"
+        
+        # 使用版本信息作为SHA标识
+        if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "" ]; then
+          new_sha=$(date +%s)
+        else
+          new_sha="$version"
+        fi
+        
+        # 检查当前版本（使用仓库内的版本文件）
+        current_sha=""
+        if [ -f "xs_version.txt" ]; then
+          current_sha=$(cat "xs_version.txt")
+        fi
+        
+        # 输出简洁的版本信息
+        echo "当前版本: ${current_sha}"
+        echo "最新版本: ${new_sha}"
+        
+        # 设置输出变量
+        if [ "$current_sha" != "$new_sha" ]; then
+          echo "::notice::检测到新版本可用"
+          echo "download_url=$download_url" >> $GITHUB_OUTPUT
+          echo "file_name=$file_name" >> $GITHUB_OUTPUT
+          echo "new_sha=$new_sha" >> $GITHUB_OUTPUT
+          echo "update_available=true" >> $GITHUB_OUTPUT
+        else
+          echo "::notice::当前已是最新版本"
+          echo "update_available=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Download and extract update
+      if: steps.check-update.outputs.update_available == 'true'
+      run: |
+        # 获取文件名和下载地址
+        original_file="${{ steps.check-update.outputs.file_name }}"
+        download_url="${{ steps.check-update.outputs.download_url }}"
+        
+        echo "正在下载更新: $original_file..."
+        echo "下载地址: $download_url"
+        
+        # 使用User-Agent下载
+        curl -L -H "User-Agent: okHttp/Mod-1.5.0.0" -o "$original_file" "$download_url"
+        
+        # 检查文件有效性
+        if [ ! -s "$original_file" ]; then
+          echo "::error::下载的文件为空！"
+          exit 1
+        fi
+        
+        # 检查文件大小
+        file_size=$(stat -c%s "$original_file" 2>/dev/null || stat -f%z "$original_file" 2>/dev/null || echo "0")
+        echo "文件大小: $file_size 字节"
+        
+        if [ "$file_size" -lt 1000 ]; then
+          echo "::warning::文件太小，可能不是有效的ZIP文件"
+          cat "$original_file"
+          exit 1
+        fi
+        
+        # 检查文件类型
+        file_type=$(file -b --mime-type "$original_file" 2>/dev/null || echo "")
+        echo "文件类型: $file_type"
+        
+        # 如果是ZIP文件，解压
+        if [[ "$file_type" == "application/zip" ]] || [[ "$original_file" == *.zip ]]; then
+          echo "正在解压ZIP文件..."
+          unzip -o -q "$original_file" -d .
+          echo "::notice::ZIP文件解压完成！"
+        else
+          echo "::notice::文件不是ZIP格式，直接使用"
+        fi
+        
+        # 更新版本记录
+        echo "${{ steps.check-update.outputs.new_sha }}" > "xs_version.txt"
+        
+        echo "::notice::下载和解压完成！"
+
+    - name: Filter API JSON with Blacklist
+      if: steps.check-update.outputs.update_available == 'true'
+      run: |
+        echo "=== 开始过滤黑名单内容 ==="
+        
+        # 定义路径（根据实际解压后的路径调整）
+        API_JSON="TVBoxOSC/tvbox/api.json"
+        XYQ_JSON="TVBoxOSC/tvbox/a.json"
+        
+        # 如果默认路径不存在，尝试查找
+        if [ ! -f "$API_JSON" ]; then
+          echo "⚠️ 默认路径不存在: $API_JSON"
+          echo "正在查找 api.json 文件..."
+          found_api=$(find . -name "api.json" -type f 2>/dev/null | head -1)
+          if [ -n "$found_api" ]; then
+            API_JSON="$found_api"
+            XYQ_JSON="$(dirname "$found_api")/a.json"
+            echo "✅ 找到 api.json: $API_JSON"
+          else
+            echo "❌ 错误: 找不到 api.json 文件"
+            echo "当前目录结构:"
+            ls -la
+            find . -type f -name "*.json" 2>/dev/null | head -20
+            exit 1
+          fi
+        fi
+        
+        # 黑名单数组
+        BLACKLIST='[
+          "指南", "百度网盘", "夸克网盘", "UC网盘", "csp_TgDouBan", "csp_TgSearch", "豆瓣",
+          "预告", "本地", "配置中心", "小斑快映", "移动", "123", "玩偶哥哥", "木偶", "玩偶", "快映", "夸克", "清影", "盘它", "人人", "即刻", "UC", "蜡笔",
+          "至臻", "多多", "欧哥", "二小", "大玩", "虎斑", "闪电", "奥秘", "团长", "雷鲸", "海绵",
+          "夸父", "趣盘", "盘库", "双星", "懒盘", "百酷", "校长", "天堂", "人人电影网", "爱搜",
+          "糖果", "聚搜", "米搜", "人人分享站", "全盘", "夸克盘搜", "哆啦新番社", "56动漫", "NT动漫",
+          "Anime1", "曼波动漫", "稀饭动漫", "咕咕动漫", "米饭动漫", "次元动漫", "派对动漫", "丫丫",
+          "黑猫动漫", "樱花动漫", "巴士动漫", "好看动漫", "奇米动漫", "怡萱动漫", "花子动漫", "动画片",
+          "路漫漫", "动漫岛", "去看吧", "爱弹幕", "异世界", "阿里云盘", "夸克云盘", "百度云盘",
+          "短剧合集", "短剧大全", "AList", "网络直播", "88看球", "哔哩合集", "哔哩哔哩演唱会",
+          "哔哩哔哩听书", "哔哩哔哩相声", "哔哩哔哩小品", "哔哩哔哩戏曲", "少儿教育", "小学课堂",
+          "初中课堂", "高中教育", "急救教学", "养生堂", "版本信息", "星辰影视", "天翼", "兄弟", "混合", "鬼鬼", "盘搜",
+          "UC云盘", "韩剧看看", "小镇影视", "面包影视", "永乐影视", "剧圈影视", "来看影视",
+          "采集之王", "1905", "漫国动漫", "丫丫动漫", "方舟动漫", "元咲动漫", "番薯动漫", "爱动漫", "咖啡体育", "古哥",
+          "酷乐", "919体育", "爱听音乐", "六月听书", "呦呦DJ", "戏曲多多", "哔哩直播", "哔哩视频", "爱奇艺", "芒果视频", "优酷视频", "腾讯视频", "九七", "瓜子体育", "球通体育", "世界听书", "蜻蜓FM", "轮回DJ", "高中课堂"
+        ]'
+        
+        # 检查jq是否安装
+        if ! command -v jq &> /dev/null; then
+          echo "::error::jq 未安装，正在安装..."
+          sudo apt-get update && sudo apt-get install -y jq
+        fi
+        
+        # 统计原始站点数
+        original_count=$(jq '.sites | length' "$API_JSON" 2>/dev/null || echo "0")
+        echo "📊 原始站点数: $original_count"
+        
+        if [ "$original_count" -eq 0 ]; then
+          echo "❌ 错误: api.json 中没有站点数据"
+          exit 1
+        fi
+        
+        # 执行过滤
+        echo "🔍 正在过滤黑名单内容..."
+        if ! jq --argjson blacklist "$BLACKLIST" \
+               '.sites |= map(select(
+                 (.key | IN($blacklist[])) == false and
+                 (.name | IN($blacklist[])) == false
+               ))' "$API_JSON" > "$XYQ_JSON.tmp" 2>/dev/null; then
+          echo "❌ JSON处理失败"
+          exit 1
+        fi
+        
+        # 统计过滤后站点数
+        filtered_count=$(jq '.sites | length' "$XYQ_JSON.tmp" 2>/dev/null || echo "0")
+        removed_count=$((original_count - filtered_count))
+        
+        echo "📊 过滤后站点数: $filtered_count"
+        echo "📊 已移除站点数: $removed_count"
+        
+        # 检查过滤后是否有内容
+        if [ "$filtered_count" -eq 0 ]; then
+          echo "⚠️ 过滤后无有效内容，使用原始api.json"
+          cp "$API_JSON" "$XYQ_JSON"
+        else
+          # 格式化输出并保存
+          jq --indent 4 '.' "$XYQ_JSON.tmp" > "$XYQ_JSON" 2>/dev/null
+          echo "✅ a.json 生成成功"
+        fi
+        
+        # 清理临时文件
+        rm -f "$XYQ_JSON.tmp"
+        
+        # 显示过滤示例
+        if [ $removed_count -gt 0 ] && [ $removed_count -le 50 ]; then
+          echo ""
+          echo "🚫 已过滤的站点示例（前5个）:"
+          jq --argjson blacklist "$BLACKLIST" \
+             '.sites[] | select(
+               (.key | IN($blacklist[])) or
+               (.name | IN($blacklist[]))
+             ) | "  - \(.key): \(.name)"' \
+             "$API_JSON" 2>/dev/null | head -5 || echo "  无法列出"
+        fi
+        
+        # 验证生成的a.json
+        if jq . "$XYQ_JSON" > /dev/null 2>&1; then
+          echo ""
+          echo "✅ 黑名单过滤完成！"
+          echo "📁 文件大小:"
+          ls -lh "$API_JSON" "$XYQ_JSON" 2>/dev/null || echo "  文件信息获取失败"
+        else
+          echo "❌ a.json 格式验证失败"
+          exit 1
+        fi
+
+    - name: Commit changes
+      if: steps.check-update.outputs.update_available == 'true'
+      run: |
+        # 配置Git用户
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        # 添加所有更改
+        git add .
+        
+        # 检查是否有变更
+        if git diff --staged --quiet; then
+          echo "::notice::没有文件变更，跳过提交"
+          exit 0
+        fi
+        
+        # 提交并推送
+        git commit -m "自动更新TVBox文件 (版本: ${{ steps.check-update.outputs.new_sha }})"
+        git push
+        
+        echo "::notice::提交成功！"
