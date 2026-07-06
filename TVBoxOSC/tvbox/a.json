@@ -462,6 +462,23 @@
             "ext": "./XYQHiker/电影港.json"
         },
         {
+            "key": "少儿教育",
+            "name": "少儿 • 教育",
+            "type": 3,
+            "api": "csp_Bili",
+            "searchable": 0,
+            "quickSearch": 0,
+            "filterable": 1,
+            "ext": {
+                "json": "./json/少儿教育.json",
+                "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
+            },
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
+        },
+        {
             "key": "push_agent",
             "name": "手机 • 推送",
             "type": 3,
