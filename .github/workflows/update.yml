@@ -181,7 +181,7 @@ jobs:
           exit 1
         fi
         
-        # 执行过滤
+        # 执行过滤，先过滤黑名单
         echo "🔍 正在过滤黑名单内容..."
         if ! jq --argjson blacklist "$BLACKLIST" \
                '.sites |= map(select(
@@ -191,6 +191,18 @@ jobs:
           echo "❌ JSON处理失败"
           exit 1
         fi
+        
+        # ========== 修改生成的 a.json 中的目标条目 ==========
+        echo "=== 修改 a.json 中的目标条目 ==="
+        echo "正在将 key='少儿教育' 的 searchable 和 quickSearch 设置为 1..."
+        
+        # 修改临时文件中的目标条目
+        jq --indent 4 \
+           '.sites |= map(if .key == "少儿教育" then .searchable = 1 | .quickSearch = 1 else . end)' \
+           "$XYQ_JSON.tmp" > "$XYQ_JSON.tmp.modified" && mv "$XYQ_JSON.tmp.modified" "$XYQ_JSON.tmp"
+        
+        echo "✅ 目标条目已修改: searchable=1, quickSearch=1"
+        # ====================================================
         
         # 统计过滤后站点数
         filtered_count=$(jq '.sites | length' "$XYQ_JSON.tmp" 2>/dev/null || echo "0")
@@ -202,7 +214,10 @@ jobs:
         # 检查过滤后是否有内容
         if [ "$filtered_count" -eq 0 ]; then
           echo "⚠️ 过滤后无有效内容，使用原始api.json"
-          cp "$API_JSON" "$XYQ_JSON"
+          # 如果要使用原始api.json，同时也要修改其中的目标条目
+          jq --indent 4 \
+             '.sites |= map(if .key == "少儿教育" then .searchable = 1 | .quickSearch = 1 else . end)' \
+             "$API_JSON" > "$XYQ_JSON"
         else
           # 格式化输出并保存
           jq --indent 4 '.' "$XYQ_JSON.tmp" > "$XYQ_JSON" 2>/dev/null
