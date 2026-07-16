@@ -18,7 +18,7 @@ jobs:
       with:
         fetch-depth: 0  # 获取完整历史记录，便于提交
     
-    - name: Check for updates
+    - name: Check for updates by MD5
       id: check-update
       run: |
         # API 接口地址
@@ -29,10 +29,8 @@ jobs:
         echo "正在获取文件信息..."
         file_info=$(curl -s -H "User-Agent: $USER_AGENT" "$API_URL")
         
-        # 从JSON中提取下载URL和文件名
+        # 从JSON中提取下载URL
         download_url=$(echo "$file_info" | jq -r '.[] | select(.name=="本地包") | .list[1].url')
-        version=$(echo "$file_info" | jq -r '.[] | select(.name=="本地包") | .list[1].version')
-        file_name=$(echo "$download_url" | grep -o '[^/]*\.zip$' || echo "单线路.zip")
         
         # 检查API响应
         if [ -z "$download_url" ] || [ "$download_url" = "null" ] || [ "$download_url" = "" ]; then
@@ -42,84 +40,95 @@ jobs:
         fi
         
         echo "下载地址: $download_url"
-        echo "版本信息: $version"
-        echo "文件名: $file_name"
         
-        # 使用版本信息作为SHA标识
-        if [ -z "$version" ] || [ "$version" = "null" ] || [ "$version" = "" ]; then
-          new_sha=$(date +%s)
+        # 获取远程文件的MD5值（只下载文件头或完整下载后计算）
+        echo "正在计算远程文件MD5..."
+        remote_md5=$(curl -s -L -H "User-Agent: $USER_AGENT" "$download_url" | md5sum | cut -d' ' -f1)
+        
+        if [ -z "$remote_md5" ]; then
+          echo "::error::无法计算远程文件MD5"
+          exit 1
+        fi
+        
+        echo "远程文件MD5: $remote_md5"
+        
+        # 读取本地存储的MD5值
+        current_md5=""
+        if [ -f "xs_md5.txt" ]; then
+          current_md5=$(cat "xs_md5.txt")
+          echo "本地MD5: $current_md5"
         else
-          new_sha="$version"
+          echo "本地MD5文件不存在，将进行首次更新"
         fi
         
-        # 检查当前版本（使用仓库内的版本文件）
-        current_sha=""
-        if [ -f "xs_version.txt" ]; then
-          current_sha=$(cat "xs_version.txt")
-        fi
-        
-        # 输出简洁的版本信息
-        echo "当前版本: ${current_sha}"
-        echo "最新版本: ${new_sha}"
-        
-        # 设置输出变量
-        if [ "$current_sha" != "$new_sha" ]; then
-          echo "::notice::检测到新版本可用"
+        # 对比MD5值
+        if [ "$current_md5" != "$remote_md5" ]; then
+          echo "::notice::检测到新版本 (MD5: $remote_md5)"
           echo "download_url=$download_url" >> $GITHUB_OUTPUT
-          echo "file_name=$file_name" >> $GITHUB_OUTPUT
-          echo "new_sha=$new_sha" >> $GITHUB_OUTPUT
+          echo "remote_md5=$remote_md5" >> $GITHUB_OUTPUT
           echo "update_available=true" >> $GITHUB_OUTPUT
         else
-          echo "::notice::当前已是最新版本"
+          echo "::notice::当前已是最新版本 (MD5: $current_md5)"
           echo "update_available=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Download and extract update
       if: steps.check-update.outputs.update_available == 'true'
       run: |
-        # 获取文件名和下载地址
-        original_file="${{ steps.check-update.outputs.file_name }}"
         download_url="${{ steps.check-update.outputs.download_url }}"
+        remote_md5="${{ steps.check-update.outputs.remote_md5 }}"
         
-        echo "正在下载更新: $original_file..."
+        echo "正在下载更新..."
         echo "下载地址: $download_url"
         
-        # 使用User-Agent下载
-        curl -L -H "User-Agent: okHttp/Mod-1.5.0.0" -o "$original_file" "$download_url"
+        # 下载ZIP文件
+        curl -L -H "User-Agent: okHttp/Mod-1.5.0.0" -o "update.zip" "$download_url"
         
-        # 检查文件有效性
-        if [ ! -s "$original_file" ]; then
+        # 检查文件是否下载成功
+        if [ ! -s "update.zip" ]; then
           echo "::error::下载的文件为空！"
           exit 1
         fi
         
+        # 验证下载文件的MD5
+        downloaded_md5=$(md5sum "update.zip" | cut -d' ' -f1)
+        echo "下载文件MD5: $downloaded_md5"
+        echo "预期MD5: $remote_md5"
+        
+        if [ "$downloaded_md5" != "$remote_md5" ]; then
+          echo "::error::MD5验证失败，文件可能损坏"
+          exit 1
+        fi
+        echo "✅ MD5验证通过"
+        
         # 检查文件大小
-        file_size=$(stat -c%s "$original_file" 2>/dev/null || stat -f%z "$original_file" 2>/dev/null || echo "0")
+        file_size=$(stat -c%s "update.zip" 2>/dev/null || stat -f%z "update.zip" 2>/dev/null || echo "0")
         echo "文件大小: $file_size 字节"
         
         if [ "$file_size" -lt 1000 ]; then
           echo "::warning::文件太小，可能不是有效的ZIP文件"
-          cat "$original_file"
+          cat "update.zip"
           exit 1
         fi
         
-        # 检查文件类型
-        file_type=$(file -b --mime-type "$original_file" 2>/dev/null || echo "")
-        echo "文件类型: $file_type"
+        # 解压ZIP文件
+        echo "正在解压ZIP文件..."
+        unzip -o -q "update.zip" -d .
         
-        # 如果是ZIP文件，解压
-        if [[ "$file_type" == "application/zip" ]] || [[ "$original_file" == *.zip ]]; then
-          echo "正在解压ZIP文件..."
-          unzip -o -q "$original_file" -d .
+        if [ $? -eq 0 ]; then
           echo "::notice::ZIP文件解压完成！"
         else
-          echo "::notice::文件不是ZIP格式，直接使用"
+          echo "::error::解压失败"
+          exit 1
         fi
         
-        # 更新版本记录
-        echo "${{ steps.check-update.outputs.new_sha }}" > "xs_version.txt"
+        # 更新MD5记录（使用远程MD5）
+        echo "$remote_md5" > "xs_md5.txt"
+        echo "✅ MD5记录已更新: $remote_md5"
         
-        echo "::notice::下载和解压完成！"
+        # 清理临时文件
+        rm -f "update.zip"
+        echo "✅ 清理完成"
 
     - name: Filter API JSON with Blacklist
       if: steps.check-update.outputs.update_available == 'true'
@@ -255,7 +264,7 @@ jobs:
       run: |
         # 配置Git用户
         git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config user.email "github-actions[bot]@users.github.com"
         
         # 添加所有更改
         git add .
@@ -267,7 +276,7 @@ jobs:
         fi
         
         # 提交并推送
-        git commit -m "自动更新TVBox文件 (版本: ${{ steps.check-update.outputs.new_sha }})"
+        git commit -m "自动更新TVBox文件 (MD5: ${{ steps.check-update.outputs.remote_md5 }})"
         git push
         
         echo "::notice::提交成功！"
