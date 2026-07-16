@@ -41,7 +41,7 @@ jobs:
         
         echo "下载地址: $download_url"
         
-        # 获取远程文件的MD5值（只下载文件头或完整下载后计算）
+        # 获取远程文件的MD5值
         echo "正在计算远程文件MD5..."
         remote_md5=$(curl -s -L -H "User-Agent: $USER_AGENT" "$download_url" | md5sum | cut -d' ' -f1)
         
@@ -78,57 +78,70 @@ jobs:
         download_url="${{ steps.check-update.outputs.download_url }}"
         remote_md5="${{ steps.check-update.outputs.remote_md5 }}"
         
+        # ========== 删除旧的ZIP文件 ==========
+        echo "正在清理旧的ZIP文件..."
+        if [ -f "单线路.zip" ]; then
+          rm -f "单线路.zip"
+          echo "✅ 已删除旧的 单线路.zip"
+        fi
+        
+        # 也清理其他可能的ZIP文件
+        find . -maxdepth 1 -name "*.zip" -type f -delete 2>/dev/null || true
+        echo "✅ 已清理所有ZIP文件"
+        
         echo "正在下载更新..."
         echo "下载地址: $download_url"
         
-        # 下载ZIP文件
-        curl -L -H "User-Agent: okHttp/Mod-1.5.0.0" -o "update.zip" "$download_url"
+        # 下载ZIP文件，命名为 单线路.zip
+        curl -L -H "User-Agent: okHttp/Mod-1.5.0.0" -o "单线路.zip" "$download_url"
         
         # 检查文件是否下载成功
-        if [ ! -s "update.zip" ]; then
+        if [ ! -s "单线路.zip" ]; then
           echo "::error::下载的文件为空！"
           exit 1
         fi
         
         # 验证下载文件的MD5
-        downloaded_md5=$(md5sum "update.zip" | cut -d' ' -f1)
+        downloaded_md5=$(md5sum "单线路.zip" | cut -d' ' -f1)
         echo "下载文件MD5: $downloaded_md5"
         echo "预期MD5: $remote_md5"
         
         if [ "$downloaded_md5" != "$remote_md5" ]; then
           echo "::error::MD5验证失败，文件可能损坏"
+          rm -f "单线路.zip"
           exit 1
         fi
         echo "✅ MD5验证通过"
         
         # 检查文件大小
-        file_size=$(stat -c%s "update.zip" 2>/dev/null || stat -f%z "update.zip" 2>/dev/null || echo "0")
+        file_size=$(stat -c%s "单线路.zip" 2>/dev/null || stat -f%z "单线路.zip" 2>/dev/null || echo "0")
         echo "文件大小: $file_size 字节"
         
         if [ "$file_size" -lt 1000 ]; then
           echo "::warning::文件太小，可能不是有效的ZIP文件"
-          cat "update.zip"
+          cat "单线路.zip"
+          rm -f "单线路.zip"
           exit 1
         fi
         
         # 解压ZIP文件
         echo "正在解压ZIP文件..."
-        unzip -o -q "update.zip" -d .
+        unzip -o -q "单线路.zip" -d .
         
         if [ $? -eq 0 ]; then
           echo "::notice::ZIP文件解压完成！"
         else
           echo "::error::解压失败"
+          rm -f "单线路.zip"
           exit 1
         fi
         
-        # 更新MD5记录（使用远程MD5）
+        # ========== 保留新的ZIP文件（不删除） ==========
+        echo "✅ 已保留新的 单线路.zip 文件"
+        
+        # 更新MD5记录
         echo "$remote_md5" > "xs_md5.txt"
         echo "✅ MD5记录已更新: $remote_md5"
-        
-        # 清理临时文件
-        rm -f "update.zip"
-        echo "✅ 清理完成"
 
     - name: Filter API JSON with Blacklist
       if: steps.check-update.outputs.update_available == 'true'
@@ -264,7 +277,7 @@ jobs:
       run: |
         # 配置Git用户
         git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.github.com"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
         
         # 添加所有更改
         git add .
