@@ -1,26 +1,27 @@
-名字：小萨更新器: xiaosa Updater
-在：:
-  时间表::
-    - cron: '0 */6 * * *'  # 每6小时检查一次更新cron: '0 */6 * * *'  # 每6小时检查一次更新
-  workflow_dispatch:        # 允许手动触发:        # 允许手动触发
+name: 小萨更新器 (xiaosa Updater)
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # 每6小时检查一次更新
+  workflow_dispatch:        # 允许手动触发
 
 # ========== 关键：添加写入权限 ==========
-权限：:
-  内容：写: write
+permissions:
+  contents: write
 
-工作::
-  更新电视盒子文件::
-    运行于: ubuntu-latest: ubuntu-latest
+jobs:
+  update-tvbox-files:
+    runs-on: ubuntu-latest
     
-    步骤：:
-    - 名称: 检出仓库name: Checkout repository
-      用途：actions/checkout@v4: actions/checkout@v4
-      与：:
-        获取完整历史记录，便于提交: 0  # 获取完整历史记录，便于提交
+    steps:
+    - name: 检出仓库
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史记录，便于提交
     
-    - 名称：通过MD5检查更新name: Check for updates by MD5
-      id: 检查更新: check-update
-      运行：|: |
+    - name: 通过MD5检查更新
+      id: check-update
+      run: |
         # API 接口地址
         API_URL="https://oss-v1.wangmeipo.cn/236/single.json"
         USER_AGENT="okHttp/Mod-1.5.0.0"
@@ -72,7 +73,7 @@
           echo "update_available=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Download and extract update
+    - name: 下载并解压更新
       if: steps.check-update.outputs.update_available == 'true'
       run: |
         download_url="${{ steps.check-update.outputs.download_url }}"
@@ -143,7 +144,7 @@
         echo "$remote_md5" > "xs_md5.txt"
         echo "✅ MD5记录已更新: $remote_md5"
 
-    - name: Filter API JSON with Blacklist
+    - name: 使用黑名单过滤API JSON
       if: steps.check-update.outputs.update_available == 'true'
       run: |
         echo "=== 开始过滤黑名单内容 ==="
@@ -272,7 +273,7 @@
           exit 1
         fi
 
-    - name: Commit changes
+    - name: 提交更改
       if: steps.check-update.outputs.update_available == 'true'
       run: |
         # 配置Git用户
