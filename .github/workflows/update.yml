@@ -1,28 +1,28 @@
-name: xiaosa Updater
-on:
-  schedule:
-    - cron: '0 */6 * * *'  # 每6小时检查一次更新
-  workflow_dispatch:        # 允许手动触发
+名字：小萨更新器: xiaosa Updater
+在：:
+  时间表::
+    - cron: '0 */6 * * *'  # 每6小时检查一次更新cron: '0 */6 * * *'  # 每6小时检查一次更新
+  workflow_dispatch:        # 允许手动触发:        # 允许手动触发
 
 # ========== 关键：添加写入权限 ==========
-permissions:
-  contents: write
+权限：:
+  内容：写: write
 
-jobs:
-  update-tvbox-files:
-    runs-on: ubuntu-latest
+工作::
+  更新电视盒子文件::
+    运行于: ubuntu-latest: ubuntu-latest
     
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # 获取完整历史记录，便于提交
+    步骤：:
+    - 名称: 检出仓库name: Checkout repository
+      用途：actions/checkout@v4: actions/checkout@v4
+      与：:
+        获取完整历史记录，便于提交: 0  # 获取完整历史记录，便于提交
     
-    - name: Check for updates by MD5
-      id: check-update
-      run: |
+    - 名称：通过MD5检查更新name: Check for updates by MD5
+      id: 检查更新: check-update
+      运行：|: |
         # API 接口地址
-        API_URL="https://pizazz.s3.bitiful.net/single.json"
+        API_URL="https://oss-v1.wangmeipo.cn/236/single.json"
         USER_AGENT="okHttp/Mod-1.5.0.0"
         
         # 获取最新文件信息
