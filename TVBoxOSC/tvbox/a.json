@@ -340,10 +340,32 @@
             "timeout": 60
         },
         {
-            "key": "笒鬼短剧",
-            "name": "笒鬼 • 短剧",
+            "key": "七猫短剧",
+            "name": "七猫 • 短剧",
             "type": 3,
-            "api": "csp_CenguiDJ",
+            "api": "csp_QimaoDJ",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "genre": "shortdrama"
+        },
+        {
+            "key": "河马短剧",
+            "name": "河马 • 短剧",
+            "type": 3,
+            "api": "csp_HemaDJ",
+            "searchable": 1,
+            "changeable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "genre": "shortdrama"
+        },
+        {
+            "key": "围观短剧",
+            "name": "围观 • 短剧",
+            "type": 3,
+            "api": "csp_WeiguanDJ",
             "searchable": 1,
             "changeable": 1,
             "quickSearch": 1,
@@ -471,6 +493,13 @@
                 "分类url": "https://www.cd-zj.com/cupfox-list/{cateId}-{area}--{class}-----{catePg}---{year}.html",
                 "分类": "电影$1#电视剧$2#综艺$3#动漫$4#短剧$5"
             }
+        },
+        {
+            "key": "喵呜动漫",
+            "name": "喵呜 • 动漫",
+            "type": 3,
+            "searchable": 1,
+            "api": "csp_MiaoWu"
         },
         {
             "key": "荐片",
