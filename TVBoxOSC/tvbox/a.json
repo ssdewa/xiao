@@ -17,6 +17,15 @@
             }
         },
         {
+            "key": "一起影视",
+            "name": "一起 • APP",
+            "type": 3,
+            "api": "csp_AppYQK",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 0
+        },
+        {
             "key": "三秋影视",
             "name": "三秋 • APP",
             "type": 3,
@@ -420,6 +429,13 @@
             "ext": "https://vip.wwgz.cn:5200"
         },
         {
+            "key": "枫叶影视",
+            "name": "枫叶 • 影视",
+            "type": 3,
+            "api": "csp_FengYe",
+            "ext": "https://www.vip1949.com/"
+        },
+        {
             "key": "爱看机器人",
             "name": "爱看 • 影视",
             "type": 3,
@@ -427,23 +443,6 @@
             "searchable": 1,
             "quickSearch": 1,
             "filterable": 1
-        },
-        {
-            "key": "枫叶影视",
-            "name": "枫叶 • 影视",
-            "type": 3,
-            "api": "csp_XBPQ",
-            "ext": {
-                "请求头": "手机",
-                "简介": "text cor3\">[*],&&</div>",
-                "图片": "data-src=\"&&\"[替换:amp;>>空]",
-                "主页url": "https://www.cd-zj.com/label/qq.html",
-                "副标题": "ft2\">&&</i>",
-                "线路数组": "<i class=\"fa ds-dianying\">&&</span>",
-                "播放数组": "anthology-list-play size\">&&</ul>",
-                "分类url": "https://www.cd-zj.com/cupfox-list/{cateId}-{area}--{class}-----{catePg}---{year}.html",
-                "分类": "电影$1#电视剧$2#综艺$3#动漫$4#短剧$5"
-            }
         },
         {
             "key": "喵呜动漫",
@@ -539,6 +538,26 @@
             "quickSearch": 0,
             "filterable": 0,
             "timeout": 60
+        },
+        {
+            "key": "兔小贝",
+            "name": "兔小贝 • 首页",
+            "type": 3,
+            "api": "csp_TuXiaoBei",
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
+        },
+        {
+            "key": "贝乐虎",
+            "name": "贝乐虎 • 儿童",
+            "type": 3,
+            "api": "csp_BeiLeHu",
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
         },
         {
             "key": "哔哩哔哩音乐",
